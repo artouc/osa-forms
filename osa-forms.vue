@@ -62,7 +62,6 @@ form.osa-forms(v-if="type === 'form'" @submit.prevent="submit")
 //-     .osa-forms__error
 //-         transition(name="osa-forms__error" v-for="i in rowStrategy")
 //-             p(v-if="i.passed === false") {{ i.error }}
-
 .osa-forms.osa-forms__input(v-else-if="type === 'number'")
     .osa-forms__label(v-if="label !== ''") {{ label }}
     input(
@@ -105,8 +104,9 @@ class SysFormError extends Error {}
 export default {
     provide () {
         return {
-            passedAllStrategyFlg: computed(() => this.isPassedAllStrategies)
-            // modelDataObject: computed(() => this.combinedDataObject)
+            // eslint-disable-next-line
+            passedAllStrategyFlg: computed(() => this.isPassedAllStrategies),
+            modelDataObject: computed(() => this.combinedDataObject)
         }
     },
     inject: {
@@ -174,19 +174,6 @@ export default {
     },
     // v-modelでバインドされたデータにemitするためのemits
     emits: ['update:modelValue', 'submit'],
-    // setup (props) {
-    //     // const isActiveInput = ref(false)
-    //     // isActiveInput.value = props.disabled
-    //     // watch(() => props.disabled, () => {
-    //     //     const isActiveInput = ref(false)
-    //     //     const { disabled } = props
-    //     //     console.log(isActiveInput, disabled)
-    //     // })
-
-    //     const isActiveInput = ref(false)
-    //     isActiveInput.value = props.disabled
-    //     console.log(isActiveInput, props.disabled)
-    // },
     data () {
         return {
             // このSFCが子要素として使われた際にインプットデータを保存しておく
@@ -199,8 +186,7 @@ export default {
             // フォーム内のバリデーション通過状況を保存しておくオブジェクト
             strategyState: {},
             // コンポーネント内のバリデーションを全て通過したフラグ
-            isPassedAllStrategies: null,
-            // isActiveInput: null
+            isPassedAllStrategies: null
         }
     },
     watch: {
@@ -225,34 +211,21 @@ export default {
                 this.combinedDataObject = data
             },
             deep: true
+        },
+        modelDataObject: {
+            handler (data) {
+                this.specificDataValue = data.value[this.specificDataKey]
+                // はじめからセットされていたデータでサブミット可能か検証
+                // こいつがないとマイページの編集とかがうまく動かないけど、こいつがあるとデータが来る前にパってエラーがでちゃう
+                this.validator(this.specificDataValue)
+            },
+            deep: true
         }
-
-        // modelDataObject: {
-        //     handler (data) {
-        //         this.specificDataValue = data.value[this.specificDataKey]
-        //         // はじめからセットされていたデータでサブミット可能か検証
-        //         // こいつがないとマイページの編集とかがうまく動かないけど、こいつがあるとデータが来る前にパってエラーがでちゃう
-        //         this.validator(this.specificDataValue)
-        //     },
-        //     deep: true
-        // }
-
-        // disabled: {
-        //     handler (newData) {
-        //         this.isActiveInput = newData
-        //         console.log(newData)
-        //     },
-        //     deep: true
-        // }
     },
     mounted () {
-        // this.isActiveInput = this.disabled
         nextTick( () => {
-            // if(this.type === 'form') {
-            //     console.log(modelValue)
-            // }
             // ストラテジーエラーを定義
-            let invalidStrategyRuleError = (name) => { return new SysFormError(`[osa-forms] Invalid strategy rule error: ${name}`) }
+            let invalidStrategyRuleError = (name) => { return new SysFormError(`[sys-form] Invalid strategy rule error: ${name}`) }
 
             // インプットでない場合ストラテジー関連の処理をスキップ
             if(this.type !== 'form' && this.type !== 'submit') {
@@ -318,7 +291,6 @@ export default {
                                         allowRuleRegExp = allowRuleRegExp + '\u3000| '
                                         break
                                     case 'num':
-                                    case 'int':
                                         allowRuleRegExp = allowRuleRegExp + '[0-9]'
                                         break
                                     case 'uppercase':
@@ -406,14 +378,8 @@ export default {
                     }
                 )
 
-
-                // this.validator(this.specificDataValue)
-
-                // // マウント時に親のstrategyStateにフォーム分のオブジェクトを用意
-                // if(this.$parent.combinedDataObject) {
-                //     // this.$parent.strategyState[this.name] = false
-                //     this.$parent.strategyState[this.name] = this.validator(this.specificDataValue)
-                // }
+                // // マウント時にSubmit可能か検証する。
+                // this.submitGate
 
                 // v-modelで指定されたオブジェクトに既に値が存在していた際
                 if (this.$parent.modelValue) {
@@ -429,16 +395,16 @@ export default {
                     }
                 }
 
-                // // 親要素にcombinedDataObjectがある（このSFCが子として呼び出されている）場合に各データオブジェクトを追加
-                // if(this.$parent.combinedDataObject) {
-                //     this.$parent.combinedDataObject[this.specificDataKey] = this.specificDataValue
-                // }
+                // 親要素にcombinedDataObjectがある（このSFCが子として呼び出されている）場合に各データオブジェクトを追加
+                if(this.$parent.combinedDataObject) {
+                    this.$parent.combinedDataObject[this.specificDataKey] = this.specificDataValue
+                }
 
-                // if(this.specificDataValue === '') {
-                //     return
-                // } else {
-                //     this.validator(this.specificDataValue)
-                // }
+                if(this.specificDataValue === '') {
+                    return
+                } else {
+                    this.validator(this.specificDataValue)
+                }
             }
         })
     },
@@ -448,27 +414,11 @@ export default {
                 this.$emit('submit')
             }
         },
-        syncToModelData () {
-            // インプットのnameと一致するkeyがあった場合、そのvalueをインプットのvalueに再代入
-            if (this.$parent.modelValue[this.specificDataKey]) {
-                this.specificDataValue = this.$parent.modelValue[this.specificDataKey]
-                // はじめからセットされていたデータでサブミット可能か検証
-                this.validator(this.specificDataValue)
-            }
-        },
         valueUpdated (event) {
             // 値が変更された際インプットデータを反映
             this.specificDataValue = event.target.value
 
             // 親要素にcombinedDataObjectがある（このSFCが子として呼び出されている）場合に各データオブジェクトを変更
-            // // サフィクスがあり、useがtrueの場合に結合したデータを渡す
-            // if(this.suffix && this.suffix.use === true) {
-            //     this.$parent.combinedDataObject[this.specificDataKey] = this.specificDataValue + this.suffix.value
-            // } else {
-            //     if(this.$parent.combinedDataObject) {
-            //         this.$parent.combinedDataObject[this.specificDataKey] = this.specificDataValue
-            //     }
-            // }
             if(this.$parent.combinedDataObject) {
                 this.$parent.combinedDataObject[this.specificDataKey] = this.specificDataValue
             }
@@ -477,43 +427,32 @@ export default {
             this.validator(event.target.value)
         },
         validator (value) {
-            let isPassedAllStrategiesInComponent = []
-
             this.rowStrategy.forEach(
                 ({rule}, index) => {
                     const result = rule.test(value)
                     this.rowStrategy[index].passed = result
-                    isPassedAllStrategiesInComponent.push(result)
                 }
             )
 
-            console.log('isPassedAllStrategiesInComponent: ' + !isPassedAllStrategiesInComponent.includes(false))
+            this.submitGate()
+        },
+        // バリデーションクリアによってSubmitボタンを解放する関数
+        submitGate () {
+            // 全てのstrategyのpassedを取得し、everyにかける。
+            let specificStrategyState = []
+            this.rowStrategy.forEach(
+                ({passed}) => {
+                    specificStrategyState.push(passed)
+                }
+            )
+            // このコンポーネント内の全てのバリデーションを通過したらtrueとなる。
+            const submitGateResult = specificStrategyState.every(i => i)
 
-            // if(this.type !== 'form') {
+            // 親要素にcombinedDataObjectがある（このSFCが子として呼び出されている）場合に親のstrategyStateを更新
             if(this.$parent.combinedDataObject) {
-                this.$parent.strategyState[this.name] = !isPassedAllStrategiesInComponent.includes(false)
+                this.$parent.strategyState[this.name] = submitGateResult
             }
-
-
-            // this.submitGate()
         }
-        // // バリデーションクリアによってSubmitボタンを解放する関数
-        // submitGate () {
-        //     // 全てのstrategyのpassedを取得し、everyにかける。
-        //     let specificStrategyState = []
-        //     this.rowStrategy.forEach(
-        //         ({passed}) => {
-        //             specificStrategyState.push(passed)
-        //         }
-        //     )
-        //     // このコンポーネント内の全てのバリデーションを通過したらtrueとなる。
-        //     const submitGateResult = specificStrategyState.every(i => i)
-
-        //     // 親要素にcombinedDataObjectがある（このSFCが子として呼び出されている）場合に親のstrategyStateを更新
-        //     if(this.$parent.combinedDataObject) {
-        //         this.$parent.strategyState[this.name] = submitGateResult
-        //     }
-        // }
     }
 }
 </script>
